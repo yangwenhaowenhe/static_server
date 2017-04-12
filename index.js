@@ -6,19 +6,8 @@ var mime = require('mime');
 
 
 const testPath = __dirname;
-// const stream = {};
 const filePathMap = {};
 
-// const promiseReadDir = (path)=>{
-//     return new Promise((resolve,reject)=>{
-//         fs.readdir(path,(err,files)=>{
-//             if(err){
-//                 reject(err)
-//             }
-//             resolve(files)
-//         })
-//     })
-// }
 const promisefy = (func) => {
     return function () {
         let args = [].slice.call(arguments);
@@ -41,53 +30,38 @@ const promisefy = (func) => {
 const promiseFsStat = promisefy(fs.lstat)
 
 const renderHtml = (res) => (files) => {
+    console.log('files: ', files)
     let str = '<!doctype html><ul><meta charset="utf-8">';
     // console.log('files: ', files)
     files.forEach((v, i) => {
         // console.log('v: ', v)
-        str += (`<li><a href=${v.path}>${v.type === 'directory' ? '文件夹' + v.path : '文件'  + v.path}</a></li>`)
+        str += (`<li><a href=${v.path}>${v.type === 'directory' ? '文件夹' + v.path : '文件' + v.path}</a></li>`)
     })
     str += '</ul></html>';
     res.setHeader('content-type', 'text/html')
     res.end(str)
 }
 
-// const testType = (path) => {
-//     let fullPath = Path.join(testPath, path);
-//     return
-//     promiseFsStat(fullPath)
-//         .then((stats) => {
-//             let result = { path };
-//             if (stats.isDirectory()) {
-//                 result.type = 'directory'
-//             }
-//             if (stats.isFile()) {
-//                 result.type = 'file'
-//             }
-//             return result
-//         })
-// }
 
 const readDir = (path, callback) => {
     // let fullPath = Path.join(testPath, path);
-    console.log('path: ',path)
+    console.log('path: ', path)
     fs.readdir(path, (err, files) => {
         if (err) {
             throw (err)
         }
         if (files) {
             let promises = files.map((v, i) =>
-                promiseFsStat(Path.join(path,v)).then((stats) => {
-                    let result = { path: Path.join(path.slice().split('\\').pop(),v) };
+                promiseFsStat(Path.join(path, v)).then((stats) => {
+                    let result = { path: Path.join(path.split(Path.sep).pop(), v) };
                     if (stats.isDirectory()) {
                         result.type = 'directory'
                     }
                     else if (stats.isFile() && !stats.isDirectory()) {
-                        let fullPathWithFilename = Path.join(path,v);
-                        console.log('fullPathWithFilename: ',fullPathWithFilename)
+                        let fullPathWithFilename = Path.join(path, v);
+                        console.log('fullPathWithFilename: ', fullPathWithFilename)
                         filePathMap[fullPathWithFilename] = {};
                         filePathMap[fullPathWithFilename].type = mime.lookup(fullPathWithFilename);
-                        filePathMap[fullPathWithFilename].file = fs.readFileSync(fullPathWithFilename);
                         result.type = 'file'
                     }
                     // console.log('result: ', result)
@@ -107,18 +81,26 @@ const readDir = (path, callback) => {
 http.createServer((req, res) => {
     // console.log('req', req.url)
     let path = url.parse(req.url).path;
-    console.log('path: ',path)
+    console.log('path: ', path)
     if (path === '/favicon.ico') {
         res.statusCode = 404;
         res.end()
     } else {
-        let fullPath = Path.join(testPath,path);
+        let fullPath = Path.join(testPath, path);
         let fileStream = filePathMap[fullPath];
         console.log(fullPath)
-        console.log('fileStream: ',fileStream)
+        console.log('fileStream: ', fileStream)
         if (fileStream) {
-            res.setHeader('content-type',fileStream.type)
-            res.end(fileStream.file)
+            res.setHeader('content-type', fileStream.type);
+            let file = filePathMap[fullPath].file
+            if (file) {
+                res.end(file)
+            } else {
+                fs.readFile(fullPath, (err, file) => {
+                    filePathMap[fullPath].file = file
+                    res.end(file)
+                })
+            }
         } else {
             readDir(fullPath, renderHtml(res))
         }
